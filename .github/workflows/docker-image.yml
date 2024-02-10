@@ -13,6 +13,51 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
+      - name: Checkout git repo
+        uses: actions/checkout@v4
+
+      - name: Get latest commit sha
+        id: commit_sha_id
+        run: | 
+            tagcommitnumber=`git rev-parse --short HEAD`
+            echo "COMMIT_SHA=$tagcommitnumber" >> $GITHUB_OUTPUT
+
+      - name: Replace SQL Host URL
+        uses: sherwin-williams-co/gha-find-replace@main
+        with:
+          find: "@MSQLSERVER@"
+          replace: ${{ secrets.NP_MYSQL_SERVER_HOST }}
+          include: Dockerfile
+
+      - name: Replace SQL DB User
+        uses: sherwin-williams-co/gha-find-replace@main
+        with:
+          find: "@DBUSER@"
+          replace: ${{ secrets.NP_MYSQL_USER}}
+          include: Dockerfile
+
+      - name: Replace SQL DB Name
+        uses: sherwin-williams-co/gha-find-replace@main
+        with:
+          find: "@DATABASENAME@"
+          replace: ${{ secrets.NP_MYSQL_DATABASE_NAME}}
+          include: Dockerfile
+
+      - name: Log in to artifactory Docker Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ${{ secrets.ARTIFACTORY_REGISTRY }}
+          username: ${{ secrets.ARTIFACTORY_USERNAME }}
+          password: ${{ secrets.ARTIFACTORY_API_KEY }}
+
+      - name: Build, push and tag container image
+        uses: docker/build-push-action@v4
+        with:
+          file: Dockerfile
+          push: true
+          context: .
+          tags: |
+            ${{secrets.ARTIFACTORY_REGISTRY}}/sherwin-williams-co/morrow/meters:${{ steps.commit_sha_id.outputs.COMMIT_SHA }}
+            ${{secrets.ARTIFACTORY_REGISTRY}}/sherwin-williams-co/morrow/meters:latest
+
+
